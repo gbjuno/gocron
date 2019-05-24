@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -66,6 +67,12 @@ type Job struct {
 
 	// Map for function and  params of function
 	fparams map[string]([]interface{})
+	
+	// Status
+	Running bool
+	
+	// Mutex
+	Lock sync.Mutex
 }
 
 // Create a new job with the time interval.
@@ -78,12 +85,22 @@ func NewJob(intervel uint64) *Job {
 		time.Sunday,
 		make(map[string]interface{}),
 		make(map[string]([]interface{})),
+		false,
 	}
+}
+
+// Set Job status Running 
+func (j *Job) setRunning(status bool) {
+	j.Lock.Lock()
+	defer j.Lock.Unlock()
+	j.Running = status
 }
 
 // True if the job should be run now
 func (j *Job) shouldRun() bool {
-	return time.Now().After(j.nextRun)
+	j.Lock.Lock()
+	defer j.Lock.Unlock()
+	return !j.Running && time.Now().After(j.nextRun)
 }
 
 //Run the job and immediately reschedule it
@@ -101,6 +118,7 @@ func (j *Job) run() (result []reflect.Value, err error) {
 	result = f.Call(in)
 	j.lastRun = time.Now()
 	j.scheduleNextRun()
+	j.setRunning(false)
 	return
 }
 
@@ -432,6 +450,7 @@ func (s *Scheduler) RunPending() {
 
 	if n != 0 {
 		for i := 0; i < n; i++ {
+			runnableJobs[i].setRunning(true)
 			go runnableJobs[i].run()
 		}
 	}
