@@ -432,7 +432,7 @@ func (s *Scheduler) RunPending() {
 
 	if n != 0 {
 		for i := 0; i < n; i++ {
-			runnableJobs[i].run()
+			go runnableJobs[i].run()
 		}
 	}
 }
