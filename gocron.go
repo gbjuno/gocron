@@ -67,10 +67,10 @@ type Job struct {
 
 	// Map for function and  params of function
 	fparams map[string]([]interface{})
-	
+
 	// Status
-	Running bool
-	
+	running bool
+
 	// Mutex
 	Lock sync.Mutex
 }
@@ -78,33 +78,35 @@ type Job struct {
 // Create a new job with the time interval.
 func NewJob(intervel uint64) *Job {
 	return &Job{
-		intervel,
-		"", "", "",
-		time.Unix(0, 0),
-		time.Unix(0, 0), 0,
-		time.Sunday,
-		make(map[string]interface{}),
-		make(map[string]([]interface{})),
-		false,
+		interval: intervel,
+		jobFunc:  "",
+		unit:     "",
+		atTime:   "",
+		lastRun:  time.Unix(0, 0),
+		nextRun:  time.Unix(0, 0),
+		period:   0,
+		startDay: time.Sunday,
+		funcs:    make(map[string]interface{}),
+		fparams:  make(map[string]([]interface{})),
+		running:  false,
 	}
 }
 
-// Set Job status Running 
+// Set Job status Running
 func (j *Job) setRunning(status bool) {
 	j.Lock.Lock()
 	defer j.Lock.Unlock()
-	j.Running = status
+	j.running = status
 }
 
 // True if the job should be run now
 func (j *Job) shouldRun() bool {
-	j.Lock.Lock()
-	defer j.Lock.Unlock()
-	return !j.Running && time.Now().After(j.nextRun)
+	return time.Now().After(j.nextRun)
 }
 
 //Run the job and immediately reschedule it
 func (j *Job) run() (result []reflect.Value, err error) {
+	j.setRunning(true)
 	f := reflect.ValueOf(j.funcs[j.jobFunc])
 	params := j.fparams[j.jobFunc]
 	if len(params) != f.Type().NumIn() {
@@ -416,10 +418,11 @@ func (s *Scheduler) getRunnableJobs() (running_jobs [MAXJOBNUM]*Job, n int) {
 	sort.Sort(s)
 	for i := 0; i < s.size; i++ {
 		if s.jobs[i].shouldRun() {
-
-			runnableJobs[n] = s.jobs[i]
-			//fmt.Println(runnableJobs)
-			n++
+			if !s.jobs[i].running {
+				runnableJobs[n] = s.jobs[i]
+				//fmt.Println(runnableJobs)
+				n++
+			}
 		} else {
 			break
 		}
@@ -450,7 +453,6 @@ func (s *Scheduler) RunPending() {
 
 	if n != 0 {
 		for i := 0; i < n; i++ {
-			runnableJobs[i].setRunning(true)
 			go runnableJobs[i].run()
 		}
 	}
